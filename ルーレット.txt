@@ -1,0 +1,969 @@
+import cv2
+import numpy as np
+import math as ma
+from gpiozero import Button 
+from gpiozero import Robot
+import time
+
+robot=Robot(left=(17,18),right=(19,20))
+robot.stop()
+
+sw=Button(13)
+def makeBlankImg(width,height,red,green,blue):
+    imageArray=np.zeros((height,width,3),np.uint8)
+    imageArray[0:height,0:width]=[blue,green,red]
+    return imageArray
+
+img_comfilm=makeBlankImg(240,240,255,255,255)
+img_result=makeBlankImg(480,480,255,255,255)
+
+def mouse_event(event,x,y,flags,param):
+    global img,px,py
+
+    if event==cv2.EVENT_LBUTTONDOWN:
+        #img_hsv=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+        px=x
+        py=y
+        #h,s,v=img_hsv[y,x]
+        #cv2.putText(img,'('+str(h)+','+str(s)+','+str(v)+')',(x,y),cv2.FONT_HERSHEY_DUPLEX,50.0,(0,255,0))
+        #print(h,s,v)
+
+#def idx_of_the_neareast(data,value)
+
+
+
+blackThreshold=64
+px=-1
+py=-1
+
+
+cv2.namedWindow("capture")
+cv2.namedWindow("fig")
+cv2.namedWindow("result")
+cv2.namedWindow("comfilm")
+
+cv2.setMouseCallback("capture",mouse_event)
+
+l=[0]*20
+p=np.zeros((1,2),dtype=np.uint16)
+mat=np.zeros((50,2),dtype=np.uint16)
+tmp=np.zeros((1,2),dtype=np.uint8)
+comdis=0
+xy_mid=0
+basearea=0.0
+areacount=0
+rh=0
+ck=0
+rt_dis=0.0
+rt_area=0
+ball_number=0
+rt_number=0
+pl1_p=1000
+pl2_p=1000
+pl3_p=1000
+pl4_p=1000
+lf=0.0
+error_c=0
+
+while(True):
+    if(l[7]!=1):
+        if(ck==0):
+            cap=None
+            cap=cv2.VideoCapture(0)
+            cap.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc("Y","U","Y","V"))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
+            cap.set(cv2.CAP_PROP_FPS,30)
+            ck+=1
+        ret,img=cap.read()
+        if not ret:
+            continue
+    else:
+        if(ck==1):
+            cap=None
+            cap=cv2.VideoCapture(2)
+            cap.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc("Y","U","Y","V"))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
+            cap.set(cv2.CAP_PROP_FPS,30)
+            ck+=1
+        ret,img=cap.read()
+        if not ret:
+            continue
+    
+    img_hsv=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+    h=img_hsv[:,:,0]
+    s=img_hsv[:,:,1]
+    v=img_hsv[:,:,2]
+    mask=np.zeros(h.shape,dtype=np.uint8)
+    mask[((h>0)&(h<15)&(s>100)&(v>140))]=255
+    k=0
+    j=0
+    maxarea=0
+
+    if(error_c>10):
+        robot.forward(1)
+        time.sleep(2)
+        error_c=0
+        robot.stop()
+
+    contours,_=cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    if len(contours)!=0:
+        if(l[0]!=3):
+            mContour=contours[0]
+            maxArea=0.0
+            i=0
+            medarea=[0]*len(contours)
+            point_array=[0]*2*len(contours)
+            for med in contours:
+                
+                medarea[i]=cv2.contourArea(med)
+                i+=1
+            #medarea[np.where(medarea!=cmed)]
+            midarea=np.median(medarea)
+            print(midarea)
+            for contour in contours:
+                area=cv2.contourArea(contour)
+                if (0.8*midarea<area):
+                    k+=1
+                    rect=contour
+                    rx,ry,rw,rh=cv2.boundingRect(rect)
+                    point_array[j]=rx
+                    j+=1
+                    point_array[j]=ry
+                    j+=1
+                    cv2.rectangle(img,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+                    
+            print(k)
+            xy_mid=rh
+    if(k==19):
+        l[0]+=1
+        point_array_2=point_array
+        print(point_array_2)
+    elif(k!=19)&(l[0]!=3):
+        l[0]=0
+    else:
+        pass
+    if(l[0]==3):
+        j=0
+        k=0
+        mask_orange=np.zeros(h.shape,dtype=np.uint8)
+        mask_orange[((h>18)&(h<30)&(s>100)&(v>95))]=255
+        contours_orange,_=cv2.findContours(mask_orange,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_orange=[0]*20
+        if(len(contours_orange)!=0)&(l[1]<3):
+            for contour in contours_orange:
+                maxarea=0
+                area=cv2.contourArea(contour)
+                if(area<midarea*0.5):
+                    if(maxarea<area):
+                        maxarea=area
+                        rect=contour
+                        rx,ry,rw,rh=cv2.boundingRect(rect)
+                        base_orange[0]=rx
+                        j+=1
+                        base_orange[1]=ry
+                        j+=1
+                        cv2.rectangle(img,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+                        print('max'+str(maxarea))
+        if(maxarea>0.2*midarea)&(l[1]<3):
+            l[1]+=1
+            base_orange2=base_orange
+            print(base_orange2)
+            print('l1'+str(l[1]))
+            basearea+=maxarea
+        elif(maxarea<0.2*midarea)&(l[1]!=3):
+            l[1]=0
+        else:
+            pass
+
+    if(l[1]==3):
+        j=0
+        k=0
+        mask_blue=np.zeros(h.shape,dtype=np.uint8)
+        mask_blue[((h>90)&(h<150)&(s>140)&(v>100))]=255
+        contours_blue,_=cv2.findContours(mask_blue,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_blue=[0]*20
+        if(len(contours_blue)!=0)&(l[2]<3):
+            for contour in contours_blue:
+                maxarea=0
+                area=cv2.contourArea(contour)
+                if(area<midarea*0.5):
+                    if(maxarea<area):
+                        maxarea=area
+                        rect=contour
+                        rx,ry,rw,rh=cv2.boundingRect(rect)
+                        base_blue[0]=rx
+                        j+=1
+                        base_blue[1]=ry
+                        j+=1
+                        cv2.rectangle(img,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+                        print('max'+str(maxarea))
+        if(maxarea>0.2*midarea)&(l[2]<3):
+            l[2]+=1
+            base_blue2=base_blue
+            print(base_blue2)
+            print('l2'+str(l[2]))
+            basearea+=maxarea
+        elif(maxarea<0.2*midarea)&(l[2]!=3):
+            l[2]=0
+        else:
+            pass
+
+    if(px!=-1):
+        ph,ps,pv=img_hsv[py,px]
+        cv2.putText(img,'('+str(ph)+','+str(ps)+','+str(pv)+')',(px,py),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,255))
+    if((l[2]==3)&(l[3]==0)):
+        print(point_array_2)
+        print(base_blue2)
+        print(base_orange2)
+        l[3]=1
+        basearea/=6
+    if((l[3]==1)&(l[4]==0)):
+        
+        #print(point_array_2)
+        cv2.putText(img,'1',(point_array_2[0],point_array_2[1]),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,255))
+        cv2.putText(img,'2',(point_array_2[2],point_array_2[3]),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,255))
+        n=0
+        
+        mindis=1000000
+        while(n!=len(point_array_2)):
+            dis_x=point_array_2[n]
+            n+=1
+            dis_y=point_array_2[n]
+            n+=1
+            crdis=ma.sqrt(((base_blue2[0]-dis_x)**2)+((base_blue2[1]-dis_y)**2))
+            if(mindis>crdis):
+                mindis=crdis
+                tmp[0][0]=n-2
+                tmp[0][1]=n-1
+
+        l[4]=1
+    if(l[4]==1)&(l[5]==0):
+        print(point_array_2[tmp[0][0]])
+        print(xy_mid)
+        xy_mid=int((xy_mid+((base_orange2[0]-base_blue2[0])/12)+((base_orange2[1]-base_blue2[1])/5))/3-1)
+        for i,coo in enumerate(mat):
+            if(i==0):
+                mat[0][0]=(point_array_2[tmp[0][0]]+xy_mid*12)
+                mat[0][1]=(point_array_2[tmp[0][1]]+4*xy_mid)
+            elif(i<40):
+                mat[i][0]=(point_array_2[tmp[0][0]])+(int((i-0.1)/3)*xy_mid)
+                if(i%3)==1:
+                    mat[i][1]=(point_array_2[tmp[0][1]])+2*xy_mid
+                elif(i%3)==2:
+                    mat[i][1]=(point_array_2[tmp[0][1]])+xy_mid
+                else:
+                    mat[i][1]=(point_array_2[tmp[0][1]])
+            
+            elif(40<=i)&(i<43):
+                mat[i][0]=point_array_2[tmp[0][0]]+4*(i-40)*xy_mid
+                mat[i][1]=mat[1][1]+xy_mid
+            elif(i==43):
+                mat[43][0]=mat[37][0]
+                mat[43][1]=mat[1][1]+xy_mid
+            elif(44<=i)&(i<50):
+                mat[i][0]=point_array_2[tmp[0][0]]+2*(i-44)*xy_mid
+                mat[i][1]=mat[40][1]+xy_mid
+            print(i,coo)
+        l[5]=1
+    if(l[5]==1):
+        pass
+        #cv2.rectangle(img,(mat[20][0],mat[20][1]),(mat[20][0]+xy_mid,mat[20][1]+xy_mid),(255,255,255),2)
+    if(l[5]==1)&(l[6]==0):
+        
+        img_fig_base=img[mat[3][1]:(mat[0][1]+xy_mid),mat[3][0]:(mat[0][0]+xy_mid)]
+        img_fig=np.copy(img_fig_base)
+        img_fig_hsv=cv2.cvtColor(img_fig,cv2.COLOR_BGR2HSV)
+        h_fig=img_fig_hsv[:,:,0]
+        s_fig=img_fig_hsv[:,:,1]
+        v_fig=img_fig_hsv[:,:,2]
+        mask_fig=np.zeros(h_fig.shape,dtype=np.uint8)
+        mask_fig[((h_fig>70)&(h_fig<150)&(s_fig>100)&(v_fig>100))]=255
+        contours_fig,_=cv2.findContours(mask_fig,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        
+        pl1_bed=[0]*len(contours_fig)*2
+        pl2_bed=[0]*len(contours_fig)*2
+        pl3_bed=[0]*len(contours_fig)*2
+        pl4_bed=[0]*len(contours_fig)*2
+
+        pl1c=0
+        pl2c=0
+        pl3c=0
+        pl4c=0
+
+        if(len(contours_fig)!=0):
+            for cnt in contours_fig:
+                arclen=cv2.arcLength(cnt,True)
+                approx = cv2.approxPolyDP(cnt, 0.05*arclen, True)
+                cv2.drawContours(img_fig, [approx], -1, (255, 0, 0), 3, cv2.LINE_AA)
+                print(len(approx))
+                if((len(approx)==4)&(cv2.contourArea(cnt)>basearea)):
+                    rect=cnt
+                    rx,ry,rw,rh=cv2.boundingRect(rect)
+                    pl1_bed[pl1c]=rx
+                    pl1c+=1
+                    pl1_bed[pl1c]=ry
+                    pl1c+=1
+                    areacount+=1
+                elif((len(approx)==3)&((cv2.contourArea(cnt)>basearea*0.5))):
+                    rect=cnt
+                    rx,ry,rw,rh=cv2.boundingRect(rect)
+                    pl2_bed[pl2c]=rx
+                    pl2c+=1
+                    pl2_bed[pl2c]=ry
+                    pl2c+=1
+                    areacount+=1
+
+                elif((len(approx)==6)&((cv2.contourArea(cnt)>basearea*1.2))):
+                    rect=cnt
+                    rx,ry,rw,rh=cv2.boundingRect(rect)
+                    pl3_bed[pl3c]=rx
+                    pl3c+=1
+                    pl3_bed[pl3c]=ry
+                    pl3c+=1
+                    areacount+=1
+
+                elif((len(approx)>10)&((cv2.contourArea(cnt)>basearea*0.6))):
+                    rect=cnt
+                    rx,ry,rw,rh=cv2.boundingRect(rect)
+                    pl4_bed[pl4c]=rx
+                    pl4c+=1
+                    pl4_bed[pl4c]=ry
+                    pl4c+=1
+                    areacount+=1
+
+
+                cv2.rectangle(img_fig,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+                    
+
+
+        cv2.imshow("fig",img_fig)
+
+        if sw.is_pressed:
+            pass
+            areacount=0
+        else:
+            print(pl1_bed)
+            print(pl2_bed)
+            print(pl3_bed)
+            print(pl4_bed)
+            cv2.putText(img_comfilm,'OK?',(100,100),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,255))
+            cv2.imshow("comfilm",img_comfilm)
+            time.sleep(3)
+            if sw.is_pressed:
+                pass
+                areacount=0
+            else:
+                l[6]=1
+
+    
+    if((l[6]==1)&(l[7]==0)):
+        n_pl1_bed=np.array(pl1_bed)
+        print(n_pl1_bed)
+        n_pl2_bed=np.array(pl2_bed)
+        n_pl3_bed=np.array(pl3_bed)
+        n_pl4_bed=np.array(pl4_bed)
+        n_pl1_bed=n_pl1_bed[n_pl1_bed!=0]
+        n_pl2_bed=n_pl2_bed[n_pl2_bed!=0]
+        n_pl3_bed=n_pl3_bed[n_pl3_bed!=0]
+        n_pl4_bed=n_pl4_bed[n_pl4_bed!=0]
+        print(n_pl1_bed)
+        print(n_pl2_bed)
+        print(n_pl3_bed)
+        print(n_pl4_bed)
+        l[7]=1
+    
+    
+    if(l[7]==1)&(l[8]==0)&(ck==2):
+        robot.forward(1)
+        time.sleep(1)
+        l[8]=1
+    
+    if(l[8]==1)&(l[9]==0):
+        robot.forward(1)
+        time.sleep(5)
+        l[9]=1
+    if(l[9]==1)&(l[10]==0):
+        img_rt_hsv=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+        h_rt=img_rt_hsv[:,:,0]
+        s_rt=img_rt_hsv[:,:,1]
+        v_rt=img_rt_hsv[:,:,2]
+        mask_rt=np.zeros(h_rt.shape,dtype=np.uint8)
+        mask_rt[((h_rt>40)&(h_rt<90)&(s_rt>40)&(s_rt<140)&(v_rt>90)&(v_rt<140))]=255#・ｽﾎにゑｿｽ・ｽ・ｽ
+        contours_rt,_=cv2.findContours(mask_rt,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_rt=np.zeros((1,2),dtype=np.uint16)
+        if(len(contours_rt)!=0):
+            maxarea=0
+            for rt in contours_rt:
+                area=cv2.contourArea(rt)
+                if(maxarea<area):
+                    maxarea=area
+                    cv2.drawContours(img,rt, -1, (255, 0, 0), 3, cv2.LINE_AA)
+                
+        if(maxarea>500):
+            robot.forward(1)
+            time.sleep(0.1)
+        else:
+            l[10]=1
+            robot.stop()
+            time.sleep(10)
+
+    if(l[10]==1)&(l[11]<4):
+        img_rt_hsv3=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+        h_rt3=img_rt_hsv3[:,:,0]
+        s_rt3=img_rt_hsv3[:,:,1]
+        v_rt3=img_rt_hsv3[:,:,2]
+        mask_rt3=np.zeros(h_rt3.shape,dtype=np.uint8)
+        mask_rt3[((h_rt3>40)&(h_rt3<90)&(s_rt3>200)&(s_rt3<250)&(v_rt3>20)&(v_rt3<90))]=255#・ｽﾎにゑｿｽ・ｽ・ｽ
+        contours_rtg,_=cv2.findContours(mask_rt3,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_rtg=np.zeros((1,2),dtype=np.uint16)
+        if(len(contours_rtg)!=0):
+            maxarea=0
+            for rt in contours_rtg:
+                area=cv2.contourArea(rt)
+                if(maxarea<area):
+                    maxarea=area
+                    rx,ry,rw,rh=cv2.boundingRect(rt)
+                    base_rtg[0][0]=rx
+                    base_rtg[0][1]=ry
+            l[11]+=1
+            print("ball")
+
+            if(l[10]==1)&(l[11]==1)&(base_rtg[0][0]!=0):
+                p=np.copy(base_rtg)
+            elif(l[10]==1)&(2<=l[11])&(l[11]<4)&((p[0][0]*0.9)<=base_rtg[0][0]<=(p[0][0]*1.1))&((p[0][1]*0.9)<=base_rtg[0][1]<=(p[0][1]*1.1))&(base_rtg[0][0]!=0):
+                p=np.copy(base_rtg)
+                if(l[11]==3):
+                    rt_ball=np.array(base_rtg)
+                    print(rt_ball)
+                    l[11]=5
+                    l[12]=1
+            elif(l[11]<5):
+                l[11]=0
+            else:
+                pass
+    
+    if(l[12]==1)&(l[13]<4):
+        img_rt_hsvo=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+        h_rto=img_rt_hsvo[:,:,0]
+        s_rto=img_rt_hsvo[:,:,1]
+        v_rto=img_rt_hsvo[:,:,2]
+        mask_rto=np.zeros(h_rto.shape,dtype=np.uint8)
+        mask_rto[((h_rto>18)&(h_rto<30)&(s_rto>160)&(v_rto>130))]=255
+        contours_rto,_=cv2.findContours(mask_rto,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_rto=np.zeros((1,2),dtype=np.uint16)
+        if(len(contours_rto)!=0):
+            maxarea=0
+            for rt in contours_rto:
+                area=cv2.contourArea(rt)
+                if(maxarea<area)&(50<area):
+                    maxarea=area
+                    rx,ry,rw,rh=cv2.boundingRect(rt)
+                    base_rto[0][0]=rx
+                    base_rto[0][1]=ry
+                    cv2.rectangle(img,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+            print(base_rt)
+            print(maxarea)
+            l[13]+=1
+            print("a")
+            print(l[13])
+
+            if(l[12]==1)&(l[13]==1)&( base_rto[0][0]!=0):
+                p=np.copy(base_rto)
+                print(base_rto)
+                print(p)
+            elif(l[12]==1)&(2<=l[13])&(l[13]<4)&((p[0][0]*0.9)<=base_rto[0][0]<=(p[0][0]*1.1))&((p[0][1]*0.9)<=base_rto[0][1]<=(p[0][1]*1.1)):
+                p=np.copy(base_rto)
+                if(l[13]==3):
+                    base_rt_og=np.array(base_rto)
+                    print(base_rt_og)
+                    l[13]=5
+                    l[14]=1
+            elif(l[13]<5):
+                l[13]=0
+            else:
+                pass
+
+    if(l[14]==1)&(l[15]<4):
+        img_rt_hsv2=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+        h_rt2=img_rt_hsv2[:,:,0]
+        s_rt2=img_rt_hsv2[:,:,1]
+        v_rt2=img_rt_hsv2[:,:,2]
+        mask_rt2=np.zeros(h_rt2.shape,dtype=np.uint8)
+        mask_rt2[((h_rt2>90)&(h_rt2<140)&(s_rt2>80)&(s_rt2<130)&(v_rt2>150))]=255
+        contours_rtb,_=cv2.findContours(mask_rt2,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+        base_rtb=np.zeros((1,2),dtype=np.uint16)
+        if(len(contours_rtb)!=0):
+            maxarea=0
+            for rt in contours_rtb:
+                area=cv2.contourArea(rt)
+                if(maxarea<area)&(area>50):
+                    maxarea=area
+                    rx,ry,rw,rh=cv2.boundingRect(rt)
+                    base_rtb[0][0]=rx
+                    base_rtb[0][1]=ry
+                    print(rx)
+                    cv2.rectangle(img,(rx,ry),(rx+rw,ry+rh),(255,255,255),2)
+            l[15]+=1
+            print(maxarea)
+            print("b")
+            print(l[15])
+
+            if(l[14]==1)&(l[15]==1)&(base_rtb[0][0]!=0):
+                p=np.copy(base_rtb)
+                print(base_rtb)
+                print(p)
+            elif(l[14]==1)&(2<=l[15])&(l[15]<4)&((p[0][0]*0.9)<=base_rtb[0][0]<=(p[0][0]*1.1))&((p[0][1]*0.9)<=base_rtb[0][1]<=(p[0][1]*1.1)):
+                p=np.copy(base_rtb)
+                if(l[15]==3):
+                    base_rt_bl=np.array(base_rtb)
+                    print(base_rt_bl)
+                    l[15]=5
+                    l[16]=1
+                    ba=int(base_rt_bl[0][0])
+                    bb=int(base_rt_og[0][0])
+                    bc=int(base_rt_bl[0][1])
+                    bd=int(base_rt_og[0][1])
+                    rt_dis=ma.sqrt(((ba-bb)**2)+((bc-bd)**2))
+                    lf=(bc-bd)/(ba-bb)
+            elif(l[15]<5):
+                l[15]=0
+            else:
+                pass
+    
+    if(l[16]==1)&(l[17]==0):
+        rt_number=-1
+        ball_dis_bl=ma.sqrt((int(base_rt_bl[0][0])-int(rt_ball[0][0]))**2+(int(base_rt_bl[0][1])-int(rt_ball[0][1]))**2)
+        ball_dis_og=ma.sqrt((int(base_rt_og[0][0])-int(rt_ball[0][0]))**2+(int(base_rt_og[0][1])-int(rt_ball[0][1]))**2)
+        dis_bl=ball_dis_bl*17/rt_dis
+        dis_og=ball_dis_og*17/rt_dis
+        print(dis_bl)
+        print(dis_og)
+        if((dis_bl+dis_og)>50):
+            l[11]=0
+            l[12]=0
+            l[13]=0
+            l[14]=0
+            l[15]=0
+            l[16]=0
+            error_c+=1
+            continue
+        ba=int(base_rt_bl[0][0])
+        bb=int(base_rt_og[0][0])
+        bc=int(base_rt_bl[0][1])
+        bd=int(base_rt_og[0][1])
+        if(6<dis_bl<7)&(23<dis_og<24):
+            rt_number=43
+        elif(6<dis_og<7)&(23<dis_bl<24):
+            rt_number=0
+        elif(rt_ball[0][1]>(bd-(bb-int(rt_ball[0][0]))*lf))&(ba>bb):
+            if(22<=dis_bl<24)&(5<dis_og<=7):
+                rt_number=2
+            elif(21.5<=dis_bl<23)&(6<dis_og<=7):
+                rt_number=14
+            elif(21<=dis_bl<22)&(6<dis_og<=7):
+                rt_number=35
+            elif(20<=dis_bl<21)&(7<dis_og<=8):
+                rt_number=23
+            elif(20<=dis_bl<22)&(9<dis_og<=11):
+                rt_number=4
+            elif(19<=dis_bl<20)&(11<dis_og<=13):
+                rt_number=16
+            elif(20<=dis_bl<22)&(12<dis_og<=14):
+                rt_number=33
+            elif(17<=dis_bl<20)&(14<dis_og<=15):
+                rt_number=21
+            elif(16<=dis_bl<17)&(15<dis_og<=16):
+                rt_number=6
+            elif(15<=dis_bl<16)&(16<dis_og<=17):
+                rt_number=18
+            elif(13<=dis_bl<15)&(17<dis_og<=19):
+                rt_number=31
+            elif(12<=dis_bl<14)&(19<dis_og<=21):
+                rt_number=19
+            elif(10<=dis_bl<12)&(18<dis_og<=20):
+                rt_number=8
+            elif(10<=dis_bl<12)&(19<dis_og<=22):
+                rt_number=12
+            elif(7<=dis_bl<10)&(19<dis_og<=23):
+                rt_number=29
+            elif(6<=dis_bl<8)&(20<dis_og<=21):
+                rt_number=25
+            elif(5<=dis_bl<7)&(21<dis_og<=22):
+                rt_number=10
+            elif(4<=dis_bl<6)&(22<dis_og<=24):
+                rt_number=27
+        elif(rt_ball[0][1]<(bd-(bb-int(rt_ball[0][0]))*lf))&(ba>bb):
+            if(22<=dis_bl<24)&(5<dis_og<=7):
+                rt_number=28
+            elif(21.5<=dis_bl<23)&(6<dis_og<=7):
+                rt_number=9
+            elif(21<=dis_bl<22)&(6<dis_og<=7):
+                rt_number=26
+            elif(20<=dis_bl<22)&(7<dis_og<=8):
+                rt_number=30
+            elif(20<=dis_bl<21)&(9<dis_og<=11):
+                rt_number=11
+            elif(19<=dis_bl<20)&(11<dis_og<=13):
+                rt_number=7
+            elif(20<=dis_bl<22)&(12<dis_og<=14):
+                rt_number=20
+            elif(16<=dis_bl<20)&(14<dis_og<=15):
+                rt_number=32
+            elif(15<=dis_bl<16)&(15<dis_og<=16):
+                rt_number=17
+            elif(14<=dis_bl<15)&(16<dis_og<=17):
+                rt_number=5
+            elif(13<=dis_bl<14)&(17<dis_og<=20):
+                rt_number=22
+            elif(12<=dis_bl<15)&(19<dis_og<=21):
+                rt_number=34
+            elif(11<=dis_bl<13)&(19<dis_og<=22):
+                rt_number=15
+            elif(10<=dis_bl<12)&(19<dis_og<=22):
+                rt_number=3
+            elif(7<=dis_bl<10)&(19<dis_og<=23):
+                rt_number=24
+            elif(6<=dis_bl<8)&(20<dis_og<=21):
+                rt_number=36
+            elif(5<=dis_bl<7)&(21<dis_og<=22):
+                rt_number=13
+            elif(4<=dis_bl<6)&(22<dis_og<=24):
+                rt_number=1
+        elif(rt_ball[0][1]>(bd-(bb-int(rt_ball[0][0]))*lf))&(ba<bb):
+            if(22<=dis_bl<24)&(5<dis_og<=7):
+                rt_number=28
+            elif(21.5<=dis_bl<23)&(6<dis_og<=7):
+                rt_number=9
+            elif(21<=dis_bl<22)&(6<dis_og<=7):
+                rt_number=26
+            elif(20<=dis_bl<21)&(7<dis_og<=8):
+                rt_number=30
+            elif(20<=dis_bl<22)&(9<dis_og<=11):
+                rt_number=11
+            elif(19<=dis_bl<20)&(11<dis_og<=13):
+                rt_number=7
+            elif(20<=dis_bl<22)&(12<dis_og<=14):
+                rt_number=20
+            elif(16<=dis_bl<20)&(14<dis_og<=15):
+                rt_number=32
+            elif(15<=dis_bl<16)&(15<dis_og<=16):
+                rt_number=17
+            elif(14<=dis_bl<15)&(16<dis_og<=17):
+                rt_number=5
+            elif(13<=dis_bl<14)&(17<dis_og<=19):
+                rt_number=22
+            elif(12<=dis_bl<15)&(19<dis_og<=21):
+                rt_number=34
+            elif(11<=dis_bl<13)&(19<dis_og<=22):
+                rt_number=15
+            elif(10<=dis_bl<12)&(19<dis_og<=23):
+                rt_number=3
+            elif(7<=dis_bl<10)&(19<dis_og<=23):
+                rt_number=24
+            elif(6<=dis_bl<8)&(20<dis_og<=21):
+                rt_number=36
+            elif(5<=dis_bl<7)&(21<dis_og<=22):
+                rt_number=13
+            elif(4<=dis_bl<6)&(22<dis_og<=24):
+                rt_number=1
+        elif(rt_ball[0][1]<(bd-(bb-int(rt_ball[0][0]))*lf))&(ba<bb):
+            if(22<=dis_bl<24)&(5<dis_og<=7):
+                rt_number=2
+            elif(21.5<=dis_bl<23)&(6<dis_og<=7):
+                rt_number=14
+            elif(21<=dis_bl<22)&(6<dis_og<=7):
+                rt_number=35
+            elif(20<=dis_bl<21)&(7<dis_og<=8):
+                rt_number=23
+            elif(20<=dis_bl<22)&(9<dis_og<=11):
+                rt_number=4
+            elif(19<=dis_bl<20)&(11<dis_og<=13):
+                rt_number=16
+            elif(20<=dis_bl<22)&(12<dis_og<=14):
+                rt_number=33
+            elif(16<=dis_bl<20)&(14<dis_og<=15):
+                rt_number=21
+            elif(15<=dis_bl<16)&(15<dis_og<=16):
+                rt_number=6
+            elif(14<=dis_bl<15)&(16<dis_og<=17):
+                rt_number=18
+            elif(13<=dis_bl<14)&(17<dis_og<=19):
+                rt_number=31
+            elif(12<=dis_bl<15)&(19<dis_og<=21):
+                rt_number=19
+            elif(11<=dis_bl<13)&(19<dis_og<=22):
+                rt_number=8
+            elif(10<=dis_bl<12)&(19<dis_og<=22):
+                rt_number=12
+            elif(7<=dis_bl<10)&(19<dis_og<=22):
+                rt_number=29
+            elif(6<=dis_bl<8)&(20<dis_og<=21):
+                rt_number=25
+            elif(5<=dis_bl<7)&(21<dis_og<=22):
+                rt_number=10
+            elif(4<=dis_bl<6)&(22<dis_og<=24):
+                rt_number=27
+
+
+
+        
+        if(rt_number==-1):
+            l[11]=0
+            l[12]=0
+            l[13]=0
+            l[14]=0
+            l[15]=0
+            l[16]=0
+            error_c+=1
+            continue
+        l[17]=1
+        print(rt_dis)
+        print(rt_number)
+    
+    if(l[17]==1)&(l[18]==0):
+        mat_dis=0
+        short_dis=10000000
+        pl1_count=int(len(n_pl1_bed)/2)
+        print(pl1_count)
+        n_pl1_count=[0]*int(len(n_pl1_bed)/2)
+        print(n_pl1_count)
+        pl2_count=int(len(n_pl2_bed)/2)
+        n_pl2_count=[0]*int(len(n_pl2_bed)/2)
+        pl3_count=int(len(n_pl3_bed)/2)
+        n_pl3_count=[0]*int(len(n_pl3_bed)/2)
+        pl4_count=int(len(n_pl4_bed)/2)
+        n_pl4_count=[0]*int(len(n_pl4_bed)/2)
+        for c in range(pl1_count):
+            for n_c,nc_m in enumerate(mat):
+                mat_dis=ma.sqrt((int(nc_m[0])-(int(n_pl1_bed[c*2])+int(mat[3][0])))**2+(int(nc_m[1])-(int(n_pl1_bed[c*2+1])+int(mat[3][1])))**2)
+                if(mat_dis<short_dis):
+                    short_dis=mat_dis
+                    n_pl1_count[c]=n_c
+        short_dis=10000000
+        for c in range(pl2_count):
+            for n_c,nc_m in enumerate(mat):
+                mat_dis=ma.sqrt((int(nc_m[0])-(int(n_pl2_bed[c*2])+int(mat[3][0])))**2+(int(nc_m[1])-(int(n_pl2_bed[c*2+1])+int(mat[3][1])))**2)
+                if(mat_dis<short_dis):
+                    short_dis=mat_dis
+                    n_pl2_count[c]=n_c
+                    print(n_c)
+        short_dis=10000000
+        for c in range(pl3_count):
+            for n_c,nc_m in enumerate(mat):
+                mat_dis=ma.sqrt((int(nc_m[0])-(int(n_pl3_bed[c*2])+int(mat[3][0])))**2+(int(nc_m[1])-(int(n_pl3_bed[c*2+1])+int(mat[3][1])))**2)
+                if(mat_dis<short_dis):
+                    short_dis=mat_dis
+                    n_pl3_count[c]=n_c
+        short_dis=10000000
+        for c in range(pl4_count):
+            for n_c,nc_m in enumerate(mat):
+                mat_dis=ma.sqrt((int(nc_m[0])-(int(n_pl4_bed[c*2])+int(mat[3][0])))**2+(int(nc_m[1])-(int(n_pl4_bed[c*2+1])+int(mat[3][1])))**2)
+                if(mat_dis<short_dis):
+                    short_dis=mat_dis
+                    n_pl4_count[c]=n_c
+        l[18]=1
+
+    if(l[18]==1)&(l[19]==0):
+        if(rt_number>=0)&(rt_number<=36)|(rt_number==43):
+            for c in n_pl1_count:
+                if(rt_number==c):
+                    pl1_p+=3600
+            for c in n_pl2_count:
+                if(rt_number==c):
+                    pl2_p+=3600
+            for c in n_pl3_count:
+                if(rt_number==c):
+                    pl3_p+=3600
+            for c in n_pl4_count:
+                if(rt_number==c):
+                    pl4_p+=3600
+        if(rt_number>=1)&(rt_number<=12):
+            for c in n_pl1_count:
+                if(c==40):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==40):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==40):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==40):
+                    pl4_p+=300
+        if(rt_number>=13)&(rt_number<=24):
+            for c in n_pl1_count:
+                if(c==41):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==41):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==41):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==41):
+                    pl4_p+=300
+        if(rt_number>=25)&(rt_number<=36):
+            for c in n_pl1_count:
+                if(c==42):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==42):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==42):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==42):
+                    pl4_p+=300
+        if((rt_number%3)==0)&(rt_number>0)&(rt_number<37):
+            for c in n_pl1_count:
+                if(c==39):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==39):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==39):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==39):
+                    pl4_p+=300
+        if((rt_number%3)==1)&(rt_number>0)&(rt_number<37):
+            for c in n_pl1_count:
+                if(c==37):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==37):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==37):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==37):
+                    pl4_p+=300
+        if((rt_number%3)==2)&(rt_number>0)&(rt_number<37):
+            for c in n_pl1_count:
+                if(c==38):
+                    pl1_p+=300
+            for c in n_pl2_count:
+                if(c==38):
+                    pl2_p+=300
+            for c in n_pl3_count:
+                if(c==38):
+                    pl3_p+=300
+            for c in n_pl4_count:
+                if(c==38):
+                    pl4_p+=300
+        if(rt_number>=1)&(rt_number<=18):
+            for c in n_pl1_count:
+                if(c==44):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==44):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==44):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==44):
+                    pl4_p+=200
+        if((rt_number%2)==0)&(rt_number!=0)&(rt_number!=43):
+            for c in n_pl1_count:
+                if(c==45):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==45):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==45):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==45):
+                    pl4_p+=200
+        if((rt_number%2)!=0)&(rt_number!=0)&(rt_number!=43):
+            for c in n_pl1_count:
+                if(c==48):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==48):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==48):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==48):
+                    pl4_p+=200
+        if(rt_number==1)|(rt_number==3)|(rt_number==5)|(rt_number==7)|(rt_number==9)|(rt_number==12)|(rt_number==14)|(rt_number==16)|(rt_number==18)|(rt_number==19)|(rt_number==21)|(rt_number==23)|(rt_number==25)|(rt_number==27)|(rt_number==30)|(rt_number==32)|(rt_number==34)|(rt_number==36):
+            for c in n_pl1_count:
+                if(c==46):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==46):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==46):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==46):
+                    pl4_p+=200
+        if(rt_number==2)|(rt_number==4)|(rt_number==6)|(rt_number==8)|(rt_number==10)|(rt_number==11)|(rt_number==13)|(rt_number==15)|(rt_number==17)|(rt_number==20)|(rt_number==22)|(rt_number==24)|(rt_number==26)|(rt_number==28)|(rt_number==29)|(rt_number==31)|(rt_number==33)|(rt_number==35):
+            for c in n_pl1_count:
+                if(c==47):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==47):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==47):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==47):
+                    pl4_p+=200
+        if(rt_number>=19)&(rt_number<=36):
+            for c in n_pl1_count:
+                if(c==49):
+                    pl1_p+=200
+            for c in n_pl2_count:
+                if(c==49):
+                    pl2_p+=200
+            for c in n_pl3_count:
+                if(c==49):
+                    pl3_p+=200
+            for c in n_pl4_count:
+                if(c==49):
+                    pl4_p+=200
+
+        for c in n_pl1_count:
+            pl1_p-=100
+        for c in n_pl2_count:
+            pl2_p-=100
+        for c in n_pl3_count:
+            pl3_p-=100
+        for c in n_pl4_count:
+            pl4_p-=100
+        l[19]=1
+    img_result=makeBlankImg(480,480,255,255,255)
+    cv2.putText(img_result,str(pl1_p),(50,300),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,255))
+    cv2.putText(img_result,str(pl2_p),(150,300),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,255,0))
+    cv2.putText(img_result,str(pl3_p),(250,300),cv2.FONT_HERSHEY_DUPLEX,1.0,(255,0,0))
+    cv2.putText(img_result,str(pl4_p),(350,300),cv2.FONT_HERSHEY_DUPLEX,1.0,(0,0,0))
+
+    cv2.imshow("result",img_result)
+
+    if(l[19]==1):
+        for t in range(6,20):
+            l[t]=0
+
+        ck=0
+        cap=None
+
+    #print(tmp)
+    cv2.imshow("capture",img)
+    if cv2.waitKey(10) & 0xFF==ord("q"):
+        break
+cap.release()
+robot.stop()
+cv2.destroyAllWindows()
